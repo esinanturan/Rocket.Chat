@@ -6,7 +6,9 @@ import { check } from 'meteor/check';
 import { Meteor } from 'meteor/meteor';
 
 import { hasPermissionAsync } from '../../app/authorization/server/functions/hasPermission';
+import { notifyOnSubscriptionChangedById } from '../../app/lib/server/lib/notifyListener';
 import { settings } from '../../app/settings/server';
+import { syncRoomRolePriorityForUserAndRoom } from '../lib/roles/syncRoomRolePriority';
 
 declare module '@rocket.chat/ddp-client' {
 	// eslint-disable-next-line @typescript-eslint/naming-convention
@@ -56,7 +58,12 @@ Meteor.methods<ServerMethods>({
 			});
 		}
 
-		await Subscriptions.addRoleById(subscription._id, 'leader');
+		const addRoleResponse = await Subscriptions.addRoleById(subscription._id, 'leader');
+		await syncRoomRolePriorityForUserAndRoom(userId, rid, subscription.roles?.concat(['leader']) || ['leader']);
+
+		if (addRoleResponse.modifiedCount) {
+			void notifyOnSubscriptionChangedById(subscription._id);
+		}
 
 		const fromUser = await Users.findOneById(uid);
 

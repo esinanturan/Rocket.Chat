@@ -1,14 +1,11 @@
 import { useSetModal } from '@rocket.chat/ui-contexts';
-import { act, screen } from '@testing-library/react';
-import { renderHook } from '@testing-library/react-hooks';
+import { act, screen, renderHook } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactElement } from 'react';
-import React, { Suspense } from 'react';
+import { Suspense } from 'react';
 
-import ModalProviderWithRegion from '../../providers/ModalProvider/ModalProviderWithRegion';
 import GenericModal from './GenericModal';
-
-import '@testing-library/jest-dom';
+import ModalProviderWithRegion from '../../providers/ModalProvider/ModalProviderWithRegion';
 
 const renderModal = (modalElement: ReactElement) => {
 	const {
@@ -34,11 +31,11 @@ describe('callbacks', () => {
 
 		renderModal(<GenericModal title='Modal' onClose={handleClose} />);
 
-		expect(await screen.findByRole('heading', { name: 'Modal', exact: true })).toBeInTheDocument();
+		expect(await screen.findByRole('heading', { name: 'Modal' })).toBeInTheDocument();
 
-		userEvent.keyboard('{Escape}');
+		await userEvent.keyboard('{Escape}');
 
-		expect(screen.queryByRole('heading', { name: 'Modal', exact: true })).not.toBeInTheDocument();
+		expect(screen.queryByRole('heading', { name: 'Modal' })).not.toBeInTheDocument();
 
 		expect(handleClose).toHaveBeenCalled();
 	});
@@ -49,9 +46,9 @@ describe('callbacks', () => {
 
 		const { setModal } = renderModal(<GenericModal title='Modal' onConfirm={handleConfirm} onClose={handleClose} />);
 
-		expect(await screen.findByRole('heading', { name: 'Modal', exact: true })).toBeInTheDocument();
+		expect(await screen.findByRole('heading', { name: 'Modal' })).toBeInTheDocument();
 
-		userEvent.click(screen.getByRole('button', { name: 'Ok', exact: true }));
+		await userEvent.click(screen.getByRole('button', { name: 'Ok' }));
 
 		expect(handleConfirm).toHaveBeenCalled();
 
@@ -59,7 +56,7 @@ describe('callbacks', () => {
 			setModal(null);
 		});
 
-		expect(screen.queryByRole('heading', { name: 'Modal', exact: true })).not.toBeInTheDocument();
+		expect(screen.queryByRole('heading', { name: 'Modal' })).not.toBeInTheDocument();
 
 		expect(handleClose).not.toHaveBeenCalled();
 	});
@@ -70,9 +67,9 @@ describe('callbacks', () => {
 
 		const { setModal } = renderModal(<GenericModal title='Modal' onCancel={handleCancel} onClose={handleClose} />);
 
-		expect(await screen.findByRole('heading', { name: 'Modal', exact: true })).toBeInTheDocument();
+		expect(await screen.findByRole('heading', { name: 'Modal' })).toBeInTheDocument();
 
-		userEvent.click(screen.getByRole('button', { name: 'Cancel', exact: true }));
+		await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
 		expect(handleCancel).toHaveBeenCalled();
 
@@ -80,7 +77,7 @@ describe('callbacks', () => {
 			setModal(null);
 		});
 
-		expect(screen.queryByRole('heading', { name: 'Modal', exact: true })).not.toBeInTheDocument();
+		expect(screen.queryByRole('heading', { name: 'Modal' })).not.toBeInTheDocument();
 
 		expect(handleClose).not.toHaveBeenCalled();
 	});
