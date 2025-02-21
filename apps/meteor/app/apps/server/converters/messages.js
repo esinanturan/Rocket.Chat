@@ -47,24 +47,33 @@ export class AppMessagesConverter {
 			editor: 'editedBy',
 			attachments: getAttachments,
 			sender: 'u',
+			threadMsgCount: 'tcount',
+			type: 't',
 		};
 
 		return transformMappedData(message, map);
 	}
 
-	async convertMessage(msgObj) {
+	async convertMessage(msgObj, cacheObj = msgObj) {
 		if (!msgObj) {
 			return undefined;
 		}
 
 		const cache =
-			this.mem.get(msgObj) ??
+			this.mem.get(cacheObj) ??
 			new Map([
 				['room', cachedFunction(this.orch.getConverters().get('rooms').convertById.bind(this.orch.getConverters().get('rooms')))],
-				['user', cachedFunction(this.orch.getConverters().get('users').convertById.bind(this.orch.getConverters().get('users')))],
+				[
+					'user.convertById',
+					cachedFunction(this.orch.getConverters().get('users').convertById.bind(this.orch.getConverters().get('users'))),
+				],
+				[
+					'user.convertToApp',
+					cachedFunction(this.orch.getConverters().get('users').convertToApp.bind(this.orch.getConverters().get('users'))),
+				],
 			]);
 
-		this.mem.set(msgObj, cache);
+		this.mem.set(cacheObj, cache);
 
 		const map = {
 			id: '_id',
@@ -83,6 +92,7 @@ export class AppMessagesConverter {
 			groupable: 'groupable',
 			token: 'token',
 			blocks: 'blocks',
+			type: 't',
 			room: async (message) => {
 				const result = await cache.get('room')(message.rid);
 				delete message.rid;
@@ -96,7 +106,7 @@ export class AppMessagesConverter {
 					return undefined;
 				}
 
-				return cache.get('user')(editedBy._id);
+				return cache.get('user.convertById')(editedBy._id);
 			},
 			attachments: async (message) => {
 				const result = await this._convertAttachmentsToApp(message.attachments);
@@ -110,8 +120,8 @@ export class AppMessagesConverter {
 
 				// When the message contains token, means the message is from the visitor(omnichannel)
 				const user = await (isMessageFromVisitor(msgObj)
-					? this.orch.getConverters().get('users').convertToApp(message.u)
-					: cache.get('user')(message.u._id));
+					? cache.get('user.convertToApp')(message.u)
+					: cache.get('user.convertById')(message.u._id));
 
 				delete message.u;
 
@@ -120,26 +130,30 @@ export class AppMessagesConverter {
 				 * `sender` as undefined, so we need to add this fallback here.
 				 */
 
-				return user || this.orch.getConverters().get('users').convertToApp(message.u);
+				return user || cache.get('user.convertToApp')(message.u);
 			},
 		};
 
 		return transformMappedData(msgObj, map);
 	}
 
-	async convertAppMessage(message) {
-		if (!message || !message.room) {
+	async convertAppMessage(message, isPartial = false) {
+		if (!message) {
 			return undefined;
 		}
 
-		const room = await Rooms.findOneById(message.room.id);
+		let rid;
+		if (message.room?.id) {
+			const room = await Rooms.findOneById(message.room.id, { projection: { _id: 1 } });
+			rid = room?._id;
+		}
 
-		if (!room) {
+		if (!rid && !isPartial) {
 			throw new Error('Invalid room provided on the message.');
 		}
 
 		let u;
-		if (message.sender && message.sender.id) {
+		if (message.sender?.id) {
 			const user = await Users.findOneById(message.sender.id);
 
 			if (user) {
@@ -168,14 +182,27 @@ export class AppMessagesConverter {
 
 		const attachments = this._convertAppAttachments(message.attachments);
 
+		let _id = message.id;
+		let ts = message.createdAt;
+
+		if (!isPartial) {
+			if (!message.id) {
+				_id = Random.id();
+			}
+
+			if (!message.createdAt) {
+				ts = new Date();
+			}
+		}
+
 		const newMessage = {
-			_id: message.id || Random.id(),
+			_id,
 			...('threadId' in message && { tmid: message.threadId }),
-			rid: room._id,
+			rid,
 			u,
 			msg: message.text,
-			ts: message.createdAt || new Date(),
-			_updatedAt: message.updatedAt || new Date(),
+			ts,
+			_updatedAt: message.updatedAt,
 			...(editedBy && { editedBy }),
 			...('editedAt' in message && { editedAt: message.editedAt }),
 			...('emoji' in message && { emoji: message.emoji }),
@@ -190,7 +217,17 @@ export class AppMessagesConverter {
 			...('token' in message && { token: message.token }),
 		};
 
-		return Object.assign(newMessage, message._unmappedProperties_);
+		if (isPartial) {
+			Object.entries(newMessage).forEach(([key, value]) => {
+				if (typeof value === 'undefined') {
+					delete newMessage[key];
+				}
+			});
+		} else {
+			Object.assign(newMessage, message._unmappedProperties_);
+		}
+
+		return newMessage;
 	}
 
 	_convertAppAttachments(attachments) {
